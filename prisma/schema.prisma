@@ -1,0 +1,335 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  VENUE_OWNER
+  VENUE_MANAGER
+  ADMIN
+}
+
+enum VenueVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  RESERVED
+  CONFIRMED
+  BLOCKED
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  PAYMENT_REVIEW
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum RequestStatus {
+  OPEN
+  REVIEWING
+  AWARDED
+  EXPIRED
+}
+
+enum BidStatus {
+  SUBMITTED
+  SHORTLISTED
+  ACCEPTED
+  DECLINED
+}
+
+enum TransactionStatus {
+  PENDING
+  VERIFIED
+  FAILED
+  REFUNDED
+}
+
+enum StaffAttendanceStatus {
+  PRESENT
+  ABSENT
+  LEAVE
+}
+
+model User {
+  id              String           @id @default(cuid())
+  email           String           @unique
+  displayName     String
+  phone           String?
+  role            UserRole         @default(CLIENT)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  ownedVenues     Venue[]          @relation("VenueOwner")
+  managedVenues   VenueManager[]
+  requests        BiddingRequest[] @relation("ClientRequests")
+  bookings        Booking[]        @relation("ClientBookings")
+  staffRecords    StaffRecord[]
+  sentBids        Bid[]             @relation("BidAuthor")
+  transactions    Transaction[]     @relation("TransactionPayer")
+}
+
+model Venue {
+  id                    String                     @id @default(cuid())
+  ownerId               String
+  name                  String
+  slug                  String                     @unique
+  description           String?
+  city                  String
+  area                  String
+  address               String?
+  latitude              Decimal                    @db.Decimal(10, 7)
+  longitude             Decimal                    @db.Decimal(10, 7)
+  capacity              Int
+  baseRental            Decimal                    @db.Decimal(12, 2)
+  perHeadCatering       Decimal                    @db.Decimal(12, 2)
+  verificationStatus    VenueVerificationStatus   @default(PENDING)
+  verifiedAt            DateTime?
+  monthlyViews          Int                        @default(0)
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  owner                 User                       @relation("VenueOwner", fields: [ownerId], references: [id])
+  managers              VenueManager[]
+  media                 Media[]
+  amenities             VenueAmenity[]
+  addOns                AddOn[]
+  availabilitySlots     AvailabilitySlot[]
+  bookings              Booking[]
+  bids                  Bid[]
+  policy                CancellationPolicy?
+  staffRecords          StaffRecord[]
+  transactions          Transaction[]
+  requestsReceived      BiddingRequestVenue[]
+
+  @@index([city, area])
+  @@index([capacity, verificationStatus])
+}
+
+model VenueManager {
+  venueId     String
+  userId      String
+  canEdit     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  venue       Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([venueId, userId])
+}
+
+model Media {
+  id          String   @id @default(cuid())
+  venueId     String
+  category    String
+  objectPath  String
+  altText     String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  venue       Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@index([venueId, category])
+}
+
+model Amenity {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  slug        String         @unique
+  venueLinks  VenueAmenity[]
+}
+
+model VenueAmenity {
+  venueId   String
+  amenityId String
+  venue     Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  amenity   Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([venueId, amenityId])
+}
+
+model AddOn {
+  id             String   @id @default(cuid())
+  venueId        String
+  name           String
+  description    String?
+  unit           String
+  price          Decimal  @db.Decimal(12, 2)
+  isSubscription  Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  venue          Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  bookingLinks   BookingAddOn[]
+
+  @@index([venueId, isActive])
+}
+
+model CancellationPolicy {
+  id          String        @id @default(cuid())
+  venueId     String        @unique
+  summary     String
+  liability   String
+  updatedAt   DateTime      @updatedAt
+  venue       Venue         @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  tiers       PolicyTier[]
+  bookings    Booking[]
+}
+
+model PolicyTier {
+  id          String              @id @default(cuid())
+  policyId    String
+  label       String
+  cutoffDays  Int
+  refundPct   Int
+  penaltyNote String?
+  policy      CancellationPolicy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId, cutoffDays])
+}
+
+model AvailabilitySlot {
+  id          String             @id @default(cuid())
+  venueId     String
+  date        DateTime           @db.Date
+  slot        String
+  status      AvailabilityStatus @default(AVAILABLE)
+  note        String?
+  venue       Venue              @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, date, slot])
+  @@index([venueId, date, status])
+}
+
+model BiddingRequest {
+  id             String                @id @default(cuid())
+  clientId       String
+  eventType      String
+  eventDate      DateTime              @db.Date
+  guestCount     Int
+  area           String
+  radiusKm       Int                   @default(15)
+  budgetMin      Decimal               @db.Decimal(12, 2)
+  budgetMax      Decimal               @db.Decimal(12, 2)
+  note           String?
+  status         RequestStatus         @default(OPEN)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  client         User                  @relation("ClientRequests", fields: [clientId], references: [id])
+  bids           Bid[]
+  venues         BiddingRequestVenue[]
+
+  @@index([eventDate, status])
+  @@index([area, budgetMax])
+}
+
+model BiddingRequestVenue {
+  requestId String
+  venueId   String
+  notifiedAt DateTime @default(now())
+  request   BiddingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  venue     Venue          @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@id([requestId, venueId])
+}
+
+model Bid {
+  id           String         @id @default(cuid())
+  requestId   String
+  venueId     String
+  authorId    String
+  amount      Decimal        @db.Decimal(12, 2)
+  guestCount  Int
+  inclusions  Json
+  note        String?
+  status      BidStatus      @default(SUBMITTED)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  request     BiddingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  venue       Venue          @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  author      User           @relation("BidAuthor", fields: [authorId], references: [id])
+  booking     Booking?
+
+  @@index([requestId, status])
+  @@index([venueId, createdAt])
+}
+
+model Booking {
+  id                   String             @id @default(cuid())
+  clientId             String
+  venueId              String
+  bidId                String?            @unique
+  policyId             String
+  eventDate            DateTime           @db.Date
+  slot                 String
+  guestCount           Int
+  amount               Decimal            @db.Decimal(12, 2)
+  liabilityAccepted    Boolean            @default(false)
+  liabilityAcceptedAt  DateTime?
+  status               BookingStatus      @default(PENDING_PAYMENT)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  client               User               @relation("ClientBookings", fields: [clientId], references: [id])
+  venue                Venue              @relation(fields: [venueId], references: [id])
+  bid                  Bid?               @relation(fields: [bidId], references: [id])
+  policy               CancellationPolicy @relation(fields: [policyId], references: [id])
+  addOns               BookingAddOn[]
+  transactions         Transaction[]
+
+  @@index([venueId, eventDate, slot, status])
+  @@index([clientId, createdAt])
+}
+
+model BookingAddOn {
+  bookingId String
+  addOnId   String
+  quantity  Int      @default(1)
+  unitPrice Decimal  @db.Decimal(12, 2)
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addOn     AddOn    @relation(fields: [addOnId], references: [id])
+
+  @@id([bookingId, addOnId])
+}
+
+model Transaction {
+  id              String            @id @default(cuid())
+  bookingId       String
+  payerId         String
+  venueId         String
+  amount          Decimal           @db.Decimal(12, 2)
+  reference       String?
+  proofObjectPath  String?
+  status          TransactionStatus @default(PENDING)
+  createdAt       DateTime          @default(now())
+  verifiedAt      DateTime?
+  booking         Booking           @relation(fields: [bookingId], references: [id])
+  payer           User              @relation("TransactionPayer", fields: [payerId], references: [id])
+  venue           Venue             @relation(fields: [venueId], references: [id])
+
+  @@index([bookingId, status])
+  @@index([venueId, createdAt])
+}
+
+model StaffRecord {
+  id          String                  @id @default(cuid())
+  venueId     String
+  userId      String?
+  staffName   String
+  workDate    DateTime                @db.Date
+  status      StaffAttendanceStatus   @default(PRESENT)
+  hours       Decimal?                @db.Decimal(5, 2)
+  expense     Decimal?                @db.Decimal(12, 2)
+  note        String?
+  createdAt   DateTime                @default(now())
+  venue       Venue                   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  user        User?                   @relation(fields: [userId], references: [id])
+
+  @@index([venueId, workDate])
+}

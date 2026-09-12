@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "GatherSpace Marketplace"
+description = "A two-sided marketplace where event organizers discover venues, post reverse-bidding requests, compare proposals, review cancellation terms, and chat with venue teams or an AI concierge."
+version = "1.0.0"
+id = "artifacts/marquee-marketplace"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20670
+
+[services.development]
+run = "pnpm --filter @workspace/marquee-marketplace run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/marquee-marketplace", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/marquee-marketplace/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20670"
+BASE_PATH = "/"

@@ -3,20 +3,23 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: GatherSpace event venue marketplace API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: venues
+  - name: requests
+  - name: bookings
+  - name: conversations
+  - name: owner
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +27,435 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /venues:
+    get:
+      operationId: listVenues
+      tags: [venues]
+      summary: Discover venues
+      parameters:
+        - $ref: "#/components/parameters/EventType"
+        - $ref: "#/components/parameters/Area"
+        - $ref: "#/components/parameters/GuestCount"
+        - $ref: "#/components/parameters/Budget"
+      responses:
+        "200":
+          description: Venue results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Venue"
+  /venues/{venueId}:
+    get:
+      operationId: getVenue
+      tags: [venues]
+      summary: Get venue details
+      parameters:
+        - $ref: "#/components/parameters/VenueId"
+      responses:
+        "200":
+          description: Venue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "404":
+          description: Venue not found
+  /owner/summary:
+    get:
+      operationId: getOwnerSummary
+      tags: [owner]
+      summary: Get owner dashboard summary
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnerSummary"
+  /requests:
+    get:
+      operationId: listRequests
+      tags: [requests]
+      summary: List event requests
+      responses:
+        "200":
+          description: Event requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BiddingRequest"
+    post:
+      operationId: createRequest
+      tags: [requests]
+      summary: Post an event request for venue bids
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BiddingRequestInput"
+      responses:
+        "201":
+          description: Request created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiddingRequest"
+  /requests/{requestId}:
+    get:
+      operationId: getRequest
+      tags: [requests]
+      summary: Get an RFP and its bids
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: RFP detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiddingRequestDetail"
+        "404":
+          description: Request not found
+  /requests/{requestId}/bids:
+    post:
+      operationId: createBid
+      tags: [requests]
+      summary: Submit a venue bid
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BidInput"
+      responses:
+        "201":
+          description: Bid created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bid"
+  /availability:
+    get:
+      operationId: checkAvailability
+      tags: [bookings]
+      summary: Check a venue date and slot
+      parameters:
+        - name: venueId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: slot
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [morning, evening, full_day]
+      responses:
+        "200":
+          description: Availability result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityResult"
+  /bookings:
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a booking after liability acceptance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingInput"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "409":
+          description: Slot unavailable
+  /conversations/{conversationId}/messages:
+    get:
+      operationId: listMessages
+      tags: [conversations]
+      summary: List chat messages
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: sendMessage
+      tags: [conversations]
+      summary: Send a chat message
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+  /conversations/{conversationId}/handoff:
+    post:
+      operationId: handoffConversation
+      tags: [conversations]
+      summary: Handoff AI chat to a venue manager
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "200":
+          description: Handoff status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Handoff"
 components:
+  parameters:
+    VenueId:
+      name: venueId
+      in: path
+      required: true
+      schema: { type: string }
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string }
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string }
+    EventType:
+      name: eventType
+      in: query
+      schema:
+        type: string
+        enum: [wedding, birthday, corporate, shower, other]
+    Area:
+      name: area
+      in: query
+      schema: { type: string }
+    GuestCount:
+      name: guestCount
+      in: query
+      schema: { type: integer, minimum: 1 }
+    Budget:
+      name: budget
+      in: query
+      schema: { type: number, minimum: 0 }
   schemas:
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
-
+        status: { type: string }
+      required: [status]
+    Venue:
+      type: object
+      required: [id, name, area, city, capacity, startingPrice, rating, reviewCount, verified, imageUrl, amenities, tags, lat, lng, availability]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        area: { type: string }
+        city: { type: string }
+        capacity: { type: integer }
+        startingPrice: { type: number }
+        rating: { type: number }
+        reviewCount: { type: integer }
+        verified: { type: boolean }
+        imageUrl: { type: string }
+        amenities:
+          type: array
+          items: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        availability: { type: string, enum: [open, limited, booked] }
+        description: { type: string }
+        gallery:
+          type: array
+          items: { type: string }
+        policy:
+          $ref: "#/components/schemas/CancellationPolicy"
+    CancellationPolicy:
+      type: object
+      required: [summary, tiers]
+      properties:
+        summary: { type: string }
+        tiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PolicyTier"
+    PolicyTier:
+      type: object
+      required: [label, refund, cutoff]
+      properties:
+        label: { type: string }
+        refund: { type: string }
+        cutoff: { type: string }
+    BiddingRequest:
+      type: object
+      required: [id, eventType, date, guests, area, budgetMin, budgetMax, amenities, status, bidCount, createdAt]
+      properties:
+        id: { type: string }
+        eventType: { type: string }
+        date: { type: string, format: date }
+        guests: { type: integer }
+        area: { type: string }
+        budgetMin: { type: number }
+        budgetMax: { type: number }
+        amenities:
+          type: array
+          items: { type: string }
+        status: { type: string, enum: [open, reviewing, awarded, expired] }
+        bidCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        note: { type: string }
+    BiddingRequestInput:
+      type: object
+      required: [eventType, date, guests, area, budgetMin, budgetMax]
+      properties:
+        eventType: { type: string }
+        date: { type: string, format: date }
+        guests: { type: integer, minimum: 1 }
+        area: { type: string, minLength: 1 }
+        budgetMin: { type: number, minimum: 0 }
+        budgetMax: { type: number, minimum: 0 }
+        amenities:
+          type: array
+          items: { type: string }
+        note: { type: string }
+    BiddingRequestDetail:
+      allOf:
+        - $ref: "#/components/schemas/BiddingRequest"
+        - type: object
+          required: [bids]
+          properties:
+            bids:
+              type: array
+              items:
+                $ref: "#/components/schemas/Bid"
+    Bid:
+      type: object
+      required: [id, requestId, venueId, venueName, amount, guestCount, inclusions, status, createdAt]
+      properties:
+        id: { type: string }
+        requestId: { type: string }
+        venueId: { type: string }
+        venueName: { type: string }
+        amount: { type: number }
+        guestCount: { type: integer }
+        inclusions:
+          type: array
+          items: { type: string }
+        status: { type: string, enum: [submitted, shortlisted, accepted, declined] }
+        createdAt: { type: string, format: date-time }
+        note: { type: string }
+    BidInput:
+      type: object
+      required: [venueId, amount, guestCount, inclusions]
+      properties:
+        venueId: { type: string }
+        amount: { type: number, minimum: 0 }
+        guestCount: { type: integer, minimum: 1 }
+        inclusions:
+          type: array
+          items: { type: string }
+        note: { type: string }
+    AvailabilityResult:
+      type: object
+      required: [venueId, date, slot, status]
+      properties:
+        venueId: { type: string }
+        date: { type: string, format: date }
+        slot: { type: string }
+        status: { type: string, enum: [available, reserved, confirmed] }
+        message: { type: string }
+    BookingInput:
+      type: object
+      required: [venueId, date, slot, guests, amount, liabilityAccepted]
+      properties:
+        venueId: { type: string }
+        date: { type: string, format: date }
+        slot: { type: string }
+        guests: { type: integer, minimum: 1 }
+        amount: { type: number, minimum: 0 }
+        liabilityAccepted: { type: boolean }
+        bidId: { type: string }
+    Booking:
+      type: object
+      required: [id, venueId, date, slot, guests, amount, status, liabilityAccepted, createdAt]
+      properties:
+        id: { type: string }
+        venueId: { type: string }
+        date: { type: string, format: date }
+        slot: { type: string }
+        guests: { type: integer }
+        amount: { type: number }
+        status: { type: string, enum: [pending_payment, payment_review, confirmed, cancelled] }
+        liabilityAccepted: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    Message:
+      type: object
+      required: [id, conversationId, sender, text, createdAt]
+      properties:
+        id: { type: string }
+        conversationId: { type: string }
+        sender: { type: string, enum: [client, ai, manager] }
+        text: { type: string }
+        createdAt: { type: string, format: date-time }
+    MessageInput:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1 }
+    Handoff:
+      type: object
+      required: [conversationId, status, message]
+      properties:
+        conversationId: { type: string }
+        status: { type: string, enum: [ai, waiting_for_manager, manager] }
+        message: { type: string }
+    OwnerSummary:
+      type: object
+      required: [venueName, profileComplete, monthlyViews, openRequests, upcomingBookings, pendingRevenue, recentActivity]
+      properties:
+        venueName: { type: string }
+        profileComplete: { type: integer }
+        monthlyViews: { type: integer }
+        openRequests: { type: integer }
+        upcomingBookings: { type: integer }
+        pendingRevenue: { type: number }
+        recentActivity:
+          type: array
+          items: { type: string }
